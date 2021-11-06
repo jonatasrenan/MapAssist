@@ -69,6 +69,7 @@ namespace MapAssist.Helpers
             // Create the Graphics object that does the work
             using (Graphics graphicsObject = Graphics.FromImage(newBitmap))
             {
+                GraphicsContainer graphicsContainer = graphicsObject.BeginContainer();
                 graphicsObject.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 graphicsObject.PixelOffsetMode = PixelOffsetMode.HighQuality;
                 graphicsObject.SmoothingMode = SmoothingMode.HighQuality;
@@ -88,6 +89,7 @@ namespace MapAssist.Helpers
 
                 // Draw the result
                 graphicsObject.DrawImage(inputImage, 0, 0);
+                graphicsObject.EndContainer(graphicsContainer);
             }
 
             return newBitmap;

@@ -23,6 +23,9 @@ namespace MapAssist.Settings
 {
     public class PointOfInterestRendering
     {
+
+        public Image IconImage;
+
         public Color IconColor;
         public Shape IconShape;
         public int IconSize;
@@ -38,7 +41,7 @@ namespace MapAssist.Settings
 
         public bool CanDrawIcon()
         {
-            return IconShape != Shape.None && IconSize > 0 && IconColor != Color.Transparent;
+            return IconImage != null || (IconShape != Shape.None && IconSize > 0 && IconColor != Color.Transparent);
         }
 
         public bool CanDrawLine()

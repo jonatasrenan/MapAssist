@@ -53,7 +53,7 @@ namespace MapAssist.Helpers
 
         public static List<PointOfInterest> Get(MapApi mapApi, AreaData areaData)
         {
-            List<PointOfInterest> pointOfInterest = new List<PointOfInterest>();
+            var pointOfInterest = new List<PointOfInterest>();
 
             switch (areaData.Area)
             {
@@ -72,6 +72,7 @@ namespace MapAssist.Helpers
                         AreaData tombData = mapApi.GetMapData(tombArea);
                         if (tombData.Objects.ContainsKey(GameObject.HoradricOrifice))
                         {
+                            System.Console.WriteLine($"Area found for Tomb Id: {(int)tombData.Area}");
                             realTomb = tombArea;
                         }
                     });

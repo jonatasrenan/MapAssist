@@ -144,7 +144,7 @@ namespace MapAssist
                 if (!mapOverlay.Visible)
                 {
                     mapOverlay.Show();
-                    if (Map.AlwaysOnTop) SetTopMost();
+                    // if (Map.AlwaysOnTop) SetTopMost();
                 }
                 mapOverlay.Refresh();
             }
@@ -184,7 +184,7 @@ namespace MapAssist
 
             UpdateLocation();
 
-            Bitmap gameMap = _compositor.Compose(_currentGameData, !Map.OverlayMode);
+            Bitmap gameMap = _compositor.Compose(_currentGameData, false); // !Map.OverlayMode
 
             if (Map.OverlayMode)
             {

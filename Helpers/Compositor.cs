@@ -45,7 +45,7 @@ namespace MapAssist.Helpers
             (_background, CropOffset) = DrawBackground(areaData, pointOfInterest);
         }
 
-        public Bitmap Compose(GameData gameData, bool scale = true)
+        public Bitmap Compose(GameData gameData, bool scale = false)
         {
             if (gameData.Area != _areaData.Area)
             {
@@ -55,8 +55,36 @@ namespace MapAssist.Helpers
 
             var image = (Bitmap)_background.Clone();
 
-            using (Graphics imageGraphics = Graphics.FromImage(image))
+            double multiplier = 1;
+
+            if (scale)
             {
+                double biggestDimension = Math.Max(image.Width, image.Height);
+
+                multiplier = Map.Size / biggestDimension;
+
+                if (multiplier == 0)
+                {
+                    multiplier = 1;
+                }
+            }
+
+            // ReSharper disable once CompareOfFloatsByEqualityOperator
+            if (multiplier != 1)
+            {
+                image = ImageUtils.ResizeImage(image, (int)(image.Width * multiplier),
+                    (int)(image.Height * multiplier));
+            }
+
+            // ReSharper disable once ConditionIsAlwaysTrueOrFalse
+            if (scale && Map.Rotate)
+            {
+                image = ImageUtils.RotateImage(image, 53, true, false, Color.Transparent);
+            }
+
+            using (var imageGraphics = Graphics.FromImage(image))
+            {
+
                 imageGraphics.CompositingQuality = CompositingQuality.HighQuality;
                 imageGraphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 imageGraphics.SmoothingMode = SmoothingMode.HighQuality;
@@ -64,12 +92,12 @@ namespace MapAssist.Helpers
 
                 Point localPlayerPosition = gameData.PlayerPosition
                     .OffsetFrom(_areaData.Origin)
-                    .OffsetFrom(CropOffset)
-                    .OffsetFrom(new Point(Settings.Rendering.Player.IconSize, Settings.Rendering.Player.IconSize));
-                
-                if (Settings.Rendering.Player.CanDrawIcon())
+                    .OffsetFrom(CropOffset);
+                    // .OffsetFrom(new Point(Rendering.Player.IconSize, Rendering.Player.IconSize));
+
+                if (Rendering.Player.CanDrawIcon())
                 {
-                    Bitmap playerIcon = GetIcon(Settings.Rendering.Player);
+                    Bitmap playerIcon = GetIcon(Rendering.Player);
                     imageGraphics.DrawImage(playerIcon, localPlayerPosition);
                 }
 
@@ -87,36 +115,52 @@ namespace MapAssist.Helpers
                         }
 
                         imageGraphics.DrawLine(pen, localPlayerPosition,
+                            poi.Position
+                            .OffsetFrom(_areaData.Origin)
+                            .OffsetFrom(CropOffset)
+                        );
+                    }
+
+                    if (poi.RenderingSettings.CanDrawIcon())
+                    {
+                        Bitmap icon = GetIcon(poi.RenderingSettings);
+                        imageGraphics.DrawImage(icon, poi.Position.OffsetFrom(_areaData.Origin).OffsetFrom(CropOffset));
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(poi.Label) && poi.RenderingSettings.CanDrawLabel())
+                    {
+                        Font font = GetFont(poi.RenderingSettings);
+                        imageGraphics.DrawString(poi.Label, font,
+                            new SolidBrush(poi.RenderingSettings.LabelColor),
                             poi.Position.OffsetFrom(_areaData.Origin).OffsetFrom(CropOffset));
                     }
                 }
-            }
-
-            double multiplier = 1;
-
-            if (scale)
-            {
-                double biggestDimension = Math.Max(image.Width, image.Height);
-
-                multiplier = Settings.Map.Size / biggestDimension;
-
-                if (multiplier == 0)
+                
+                foreach (var monster in gameData.Monsters)
                 {
-                    multiplier = 1;
+                    Point localPosition = monster.Position
+                        .OffsetFrom(_areaData.Origin)
+                        .OffsetFrom(CropOffset);
+                        // .OffsetFrom(new Point(Rendering.Monster.IconSize, Rendering.Monster.IconSize));
+
+                    switch (monster.IsElite())
+                    {
+                        case true:
+                            if (Rendering.Monster.CanDrawIcon())
+                            {
+                                Bitmap monsterIcon = GetIcon(Rendering.Elite);
+                                imageGraphics.DrawImage(monsterIcon, localPosition);
+                            }
+                            break;
+                        case false:
+                            if (Rendering.Monster.CanDrawIcon())
+                            {
+                                Bitmap monsterIcon = GetIcon(Rendering.Monster);
+                                imageGraphics.DrawImage(monsterIcon, localPosition);
+                            }
+                            break;
+                    }
                 }
-            }
-
-            // ReSharper disable once CompareOfFloatsByEqualityOperator
-            if (multiplier != 1)
-            {
-                image = ImageUtils.ResizeImage(image, (int)(image.Width * multiplier),
-                    (int)(image.Height * multiplier));
-            }
-
-            // ReSharper disable once ConditionIsAlwaysTrueOrFalse
-            if (scale && Settings.Map.Rotate)
-            {
-                image = ImageUtils.RotateImage(image, 53, true, false, Color.Transparent);
             }
 
             return image;
@@ -140,29 +184,12 @@ namespace MapAssist.Helpers
                 {
                     for (var x = 0; x < areaData.CollisionGrid[y].Length; x++)
                     {
-                        int type = areaData.CollisionGrid[y][x];
-                        Color? typeColor = Settings.Map.MapColors[type];
+                        var type = areaData.CollisionGrid[y][x];
+                        Color? typeColor = Map.MapColors[type];
                         if (typeColor != null)
                         {
                             background.SetPixel(x, y, (Color)typeColor);
                         }
-                    }
-                }
-
-                foreach (PointOfInterest poi in pointOfInterest)
-                {
-                    if (poi.RenderingSettings.CanDrawIcon())
-                    {
-                        Bitmap icon = GetIcon(poi.RenderingSettings);
-                        backgroundGraphics.DrawImage(icon, poi.Position.OffsetFrom(areaData.Origin));
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(poi.Label) && poi.RenderingSettings.CanDrawLabel())
-                    {
-                        Font font = GetFont(poi.RenderingSettings);
-                        backgroundGraphics.DrawString(poi.Label, font,
-                            new SolidBrush(poi.RenderingSettings.LabelColor),
-                            poi.Position.OffsetFrom(areaData.Origin));
                     }
                 }
 
@@ -185,11 +212,16 @@ namespace MapAssist.Helpers
 
         private Bitmap GetIcon(PointOfInterestRendering poiSettings)
         {
+            if (poiSettings.IconImage != null)
+            {
+                return (Bitmap)poiSettings.IconImage;
+            }
+
             (Shape IconShape, int IconSize, Color Color) cacheKey = (poiSettings.IconShape, poiSettings.IconSize, Color: poiSettings.IconColor);
             if (!_iconCache.ContainsKey(cacheKey))
             {
                 var bitmap = new Bitmap(poiSettings.IconSize, poiSettings.IconSize, PixelFormat.Format32bppArgb);
-                using (Graphics g = Graphics.FromImage(bitmap))
+                using (var g = Graphics.FromImage(bitmap))
                 {
                     g.SmoothingMode = SmoothingMode.AntiAlias;
                     switch (poiSettings.IconShape)

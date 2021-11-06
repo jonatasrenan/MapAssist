@@ -18,186 +18,98 @@
  **/
 
 using System;
-using System.Diagnostics;
-using System.Drawing;
-using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text;
-
-using MapAssist.Structs;
+using System.Collections.Generic;
 using MapAssist.Types;
 
 namespace MapAssist.Helpers
 {
-    class GameMemory
+    public static class GameMemory
     {
-        private static readonly string ProcessName = Encoding.UTF8.GetString(new byte[] { 68, 50, 82 });
-        private static UnitAny PlayerUnit = default;
-        private static int _lastProcessId = 0;
-
-        unsafe public static GameData GetGameData()
+        public static GameData GetGameData()
         {
-            IntPtr processHandle = IntPtr.Zero;
-
             try
             {
-                Process[] process = Process.GetProcessesByName(ProcessName);
+                var playerUnit = GameManager.PlayerUnit;
+                playerUnit.Update();
 
-                Process gameProcess = null;
-
-                IntPtr windowInFocus = WindowsExternal.GetForegroundWindow();
-                if (windowInFocus == IntPtr.Zero)
-                {
-                    gameProcess = process.FirstOrDefault();
-                }
-                else
-                {
-                    gameProcess = process.FirstOrDefault(p => p.MainWindowHandle == windowInFocus);
-                }
-
-                if (gameProcess == null)
-                {
-                    throw new Exception("Game process not found.");
-                }
-
-                // If changing processes we need to re-find the player
-                if (gameProcess.Id != _lastProcessId)
-                {
-                    ResetPlayerUnit();
-                }
-
-                _lastProcessId = gameProcess.Id;
-
-                processHandle =
-                    WindowsExternal.OpenProcess((uint)WindowsExternal.ProcessAccessFlags.VirtualMemoryRead, false, gameProcess.Id);
-                IntPtr processAddress = gameProcess.MainModule.BaseAddress;
-
-                if (Equals(PlayerUnit, default(UnitAny)))
-                {
-                    var unitHashTable =
-                        Read<UnitHashTable>(processHandle, IntPtr.Add(processAddress, Offsets.UnitHashTable));
-                    foreach (var pUnitAny in unitHashTable.UnitTable)
-                    {
-                        var pListNext = pUnitAny;
-
-                        while (pListNext != IntPtr.Zero)
-                        {
-                            var unitAny = Read<UnitAny>(processHandle, pListNext);
-                            if (unitAny.Inventory != IntPtr.Zero)
-                            {
-                                var inventory = Read<Inventory>(processHandle, (IntPtr)unitAny.Inventory);
-                                if (inventory.pUnk1 != IntPtr.Zero)
-                                {
-                                    PlayerUnit = unitAny;
-                                    break;
-                                }
-                            }
-
-                            pListNext = (IntPtr)unitAny.pListNext;
-                        }
-
-                        if (!Equals(PlayerUnit, default(UnitAny)))
-                        {
-                            break;
-                        }
-                    }
-
-                    if (Equals(PlayerUnit, default(UnitAny)))
-                    {
-                        throw new Exception("Unable to find player unit");
-                    }
-                }
-
-                var playerName = Encoding.ASCII.GetString(Read<byte>(processHandle, PlayerUnit.UnitData, 16)).TrimEnd((char)0);
-                var act = Read<Act>(processHandle, (IntPtr)PlayerUnit.pAct);
-                var mapSeed = act.MapSeed;
+                var mapSeed = playerUnit.Act.MapSeed;
 
                 if (mapSeed <= 0 || mapSeed > 0xFFFFFFFF)
                 {
                     throw new Exception("Map seed is out of bounds.");
                 }
 
-                var actId = act.ActId;
-                var actMisc = Read<ActMisc>(processHandle, (IntPtr)act.ActMisc);
-                var gameDifficulty = actMisc.GameDifficulty;
+                var actId = playerUnit.Act.ActId;
+
+                var gameDifficulty = playerUnit.Act.ActMisc.GameDifficulty;
 
                 if (!gameDifficulty.IsValid())
                 {
                     throw new Exception("Game difficulty out of bounds.");
                 }
 
-                var path = Read<Path>(processHandle, (IntPtr)PlayerUnit.pPath);
-                var positionX = path.DynamicX;
-                var positionY = path.DynamicY;
-                var room = Read<Room>(processHandle, (IntPtr)path.pRoom);
-                var roomEx = Read<RoomEx>(processHandle, (IntPtr)room.pRoomEx);
-                var level = Read<Level>(processHandle, (IntPtr)roomEx.pLevel);
-                var levelId = level.LevelId;
+                var levelId = playerUnit.Path.Room.RoomEx.Level.LevelId;
 
                 if (!levelId.IsValid())
                 {
                     throw new Exception("Level id out of bounds.");
                 }
 
-                var mapShown = Read<UiSettings>(processHandle, IntPtr.Add(processAddress, Offsets.UiSettings)).MapShown;
+                var mapShown = GameManager.UiSettings.MapShown;
+
+                var items = new List<Types.UnitAny>();
+                var monsters = new List<Types.UnitAny>();
+                var players = new List<Types.UnitAny>();
+                var shrines = new List<Types.UnitAny>();
+                var objects = new List<Types.UnitAny>();
+
+                foreach (var roomNear in playerUnit.Path.Room.RoomsNear)
+                {
+                    var unit = roomNear.UnitFirst;
+                    while (unit.IsValid())
+                    {
+                        // unit.Update();
+                        if (unit.UnitType == UnitType.Object)
+                        {
+                            objects.Add(unit);
+                        }
+                        else if (unit.IsMonster())
+                        {
+                            monsters.Add(unit);
+                        }
+                        else if (unit.UnitType == UnitType.Player && unit.IsValid())
+                        {
+                            players.Add(unit);
+                        }
+                        {
+                            items.Add(unit);
+                        }
+                        unit = unit.RoomNext;
+                    }
+                }
 
                 return new GameData
                 {
-                    PlayerPosition = new Point(positionX, positionY),
+                    PlayerPosition = playerUnit.Position,
                     MapSeed = mapSeed,
                     Area = levelId,
                     Difficulty = gameDifficulty,
                     MapShown = mapShown,
-                    MainWindowHandle = gameProcess.MainWindowHandle,
-                    PlayerName = playerName
+                    MainWindowHandle = GameManager.MainWindowHandle,
+                    Items = items,
+                    Players = players,
+                    Monsters = monsters,
+                    Objects = objects,
+                    Shrines = shrines,
+                    PlayerName = playerUnit.Name
                 };
             }
             catch (Exception exception)
             {
                 Console.WriteLine(exception.Message);
-                ResetPlayerUnit();
+                GameManager.ResetPlayerUnit();
                 return null;
             }
-            finally
-            {
-                if (processHandle != IntPtr.Zero)
-                {
-                    WindowsExternal.CloseHandle(processHandle);
-                }
-            }
-        }
-
-        private static void ResetPlayerUnit()
-        {
-            PlayerUnit = default;
-        }
-
-        public static T[] Read<T>(IntPtr processHandle, IntPtr address, int count) where T : struct
-        {
-            var sz = Marshal.SizeOf<T>();
-            var buf = new byte[sz * count];
-            WindowsExternal.ReadProcessMemory(processHandle, address, buf, buf.Length, out _);
-
-            var handle = GCHandle.Alloc(buf, GCHandleType.Pinned);
-            try
-            {
-                var result = new T[count];
-                for (var i = 0; i < count; i++)
-                {
-                    result[i] = (T)Marshal.PtrToStructure(handle.AddrOfPinnedObject() + (i * sz), typeof(T));
-                }
-
-                return result;
-            }
-            finally
-            {
-                handle.Free();
-            }
-        }
-
-        public static T Read<T>(IntPtr processHandle, IntPtr address) where T : struct
-        {
-            return Read<T>(processHandle, address, 1)[0];
         }
     }
 }

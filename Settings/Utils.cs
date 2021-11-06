@@ -21,6 +21,7 @@ using System;
 using System.Configuration;
 using System.Drawing;
 using System.Linq;
+using MapAssist.Properties;
 using MapAssist.Types;
 
 namespace MapAssist.Settings
@@ -43,7 +44,7 @@ namespace MapAssist.Settings
 
         private static T GetConfigValue<T>(string key, Func<string, T> converter, T fallback = default)
         {
-            string valueString = ConfigurationManager.AppSettings[key];
+            var valueString = ConfigurationManager.AppSettings[key];
             return string.IsNullOrWhiteSpace(valueString) ? fallback : converter.Invoke(valueString);
         }
 
@@ -75,6 +76,7 @@ namespace MapAssist.Settings
         {
             return new PointOfInterestRendering
             {
+                IconImage = GetConfigValue($"{name}.IconImage", t => (Image)Resources.ResourceManager.GetObject(t)),
                 IconColor = GetConfigValue($"{name}.IconColor", ParseColor, Color.Transparent),
                 IconShape = GetConfigValue($"{name}.IconShape", t => (Shape)Enum.Parse(typeof(Shape), t, true)),
                 IconSize = GetConfigValue($"{name}.IconSize", Convert.ToInt32),

@@ -17,6 +17,7 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  **/
 
+using System;
 using System.Runtime.InteropServices;
 
 namespace MapAssist.Structs
@@ -24,6 +25,6 @@ namespace MapAssist.Structs
     [StructLayout(LayoutKind.Explicit)]
     unsafe public struct RoomEx
     {
-        [FieldOffset(0x90)] public Level* pLevel;
+        [FieldOffset(0x90)] public IntPtr pLevel;
     }
 }
