@@ -27,6 +27,7 @@ using MapAssist.Settings;
 using Gma.System.MouseKeyHook;
 using System.Numerics;
 using System.Configuration;
+using Newtonsoft.Json;
 
 namespace MapAssist
 {
@@ -122,13 +123,16 @@ namespace MapAssist
                     _mapApi = new MapApi(MapApi.Client, gameData.Difficulty, gameData.MapSeed);
                 }
 
+                List<PointOfInterest> pointsOfInterest = null;
+                AreaData areaDataStdout = null;
+
                 if (gameData.HasMapChanged(_currentGameData))
                 {
                     Console.WriteLine($"Area changed: {gameData.Area}");
                     if (gameData.Area != Area.None)
                     {
-                        _areaData = _mapApi.GetMapData(gameData.Area);
-                        List<PointOfInterest> pointsOfInterest = PointOfInterestHandler.Get(_mapApi, _areaData);
+                        _areaData = areaDataStdout = _mapApi.GetMapData(gameData.Area);
+                        pointsOfInterest = PointOfInterestHandler.Get(_mapApi, _areaData);
                         _compositor = new Compositor(_areaData, pointsOfInterest);
                     }
                     else
@@ -138,6 +142,15 @@ namespace MapAssist
                 }
 
                 _currentGameData = gameData;
+                
+                var allData = new AllData
+                {
+                    GameData = _currentGameData,
+                    AreaData = areaDataStdout,
+                    PointsOfInterest = pointsOfInterest
+                };
+                var allDataJson = JsonConvert.SerializeObject(allData);
+                Console.WriteLine(allDataJson);
 
                 if (ShouldHideMap())
                 {
